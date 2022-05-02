@@ -16,10 +16,4 @@
     <PackageReference Include="Telegram.Bot" Version="17.0.0" />
   </ItemGroup>
 
-  <ItemGroup>
-    <None Update="Files\tux.png">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
-
 </Project>
