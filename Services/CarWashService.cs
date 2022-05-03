@@ -190,13 +190,35 @@ public class CarWashService: IMenuService
     private async Task<InlineKeyboardMarkup> GetHistoryKeyboardAsync()
     {
         var buttons = new List<List<InlineKeyboardButton>>();
-
         var pageSize = 5;
-        var items = await _repository.GetCarwashHistoryAsync(pageSize);
+        var items = await _repository.GetCarwashHistoryAsync(100);
 
-        foreach (var historyItem in items)
+        var grouped = items
+            .GroupBy(x => x.CreatedAt.Date)
+            .Select(x =>
+            {
+                var dateLastItem = x.OrderByDescending(y => y.CreatedAt).First();
+
+                var minusItems = x.Where(x => x.Change < 0).Select(x => x.Change);
+                var plusItems = x.Where(x => x.Change > 0).Select(x => x.Change);
+
+                var changeParts = new List<string>();
+                if (minusItems.Any()) changeParts.Add(minusItems.Sum().ToString());
+                if (plusItems.Any()) changeParts.Add($"+{plusItems.Sum()}");
+
+                return new
+                {
+                    Date = x.Key,
+                    Change = string.Join("/", changeParts),
+                    Balance = dateLastItem.Balance
+                };
+            })
+            .Take(pageSize)
+            .ToList();
+
+        foreach (var historyDate in grouped)
         {
-            var text = $"{historyItem.CreatedAt}: {historyItem.Change} => {historyItem.Balance}";
+            var text = $"{historyDate.Date:dd.MM.yyyy}: {historyDate.Change} => {historyDate.Balance}";
 
             buttons.Add(new List<InlineKeyboardButton> { InlineKeyboardButton.WithCallbackData(text, BuildCommand(Selfwash.MainMenu)) });
         }
