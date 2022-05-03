@@ -17,7 +17,7 @@ public class EmptyService : IMenuService
         };
     }
 
-    public async Task<MenuServiceResponse> ProcessCommandAsync(string[] commandParts)
+    public async Task<MenuServiceResponse> ProcessCommandAsync(string[] commandParts, bool isAdmin)
     {
         return new MenuServiceResponse();
     }

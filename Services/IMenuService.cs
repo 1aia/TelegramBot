@@ -8,7 +8,7 @@ public interface IMenuService
 
     string Command { get; }
 
-    Task<MenuServiceResponse> ProcessCommandAsync(string[] commandParts);
+    Task<MenuServiceResponse> ProcessCommandAsync(string[] commandParts, bool isAdmin);
 
     Task<MenuServiceResponse> InitResponseAsync();
 }

@@ -4,6 +4,7 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.InputFiles;
 using Telegram.Bot.Types.ReplyMarkups;
+using TelegramBot.Configuration;
 using TelegramBot.Models;
 
 namespace TelegramBot.Services;
@@ -13,12 +14,15 @@ public class HandleUpdateService
     private readonly ITelegramBotClient _botClient;
     private readonly ILogger<HandleUpdateService> _logger;
     private readonly Dictionary<string, IMenuService> _menuServicesDict;
+    private int _adminId;
 
-    public HandleUpdateService(ITelegramBotClient botClient, ILogger<HandleUpdateService> logger, IEnumerable<IMenuService> menuServices)
+    public HandleUpdateService(ITelegramBotClient botClient, ILogger<HandleUpdateService> logger, 
+        IEnumerable<IMenuService> menuServices, IConfiguration configuration)
     {
         _botClient = botClient;
         _logger = logger;
         _menuServicesDict = menuServices.ToDictionary(x => x.Command);
+        _adminId = configuration.GetSection(Literals.AdminIdConfigurationKey).Get<int>();
     }
 
     public async Task EchoAsync(Update update)
@@ -179,6 +183,7 @@ public class HandleUpdateService
     {
         var parts = callbackQuery.Data?.Split(' ');
         var text = $"Received {callbackQuery.Data}";
+        var isAdmin = callbackQuery.From.Id == _adminId;
 
         if (parts?.Length > 0)
         {
@@ -190,7 +195,7 @@ public class HandleUpdateService
 
                 var response = parts.Length == 1 
                     ? await service.InitResponseAsync()
-                    : await service.ProcessCommandAsync(parts);
+                    : await service.ProcessCommandAsync(parts, isAdmin);
 
                 await OnCallbackQueryReceivedAsync(callbackQuery, response);
             }

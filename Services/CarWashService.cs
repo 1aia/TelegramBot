@@ -114,7 +114,7 @@ public class CarWashService: IMenuService
         };
     }
 
-    public async Task<MenuServiceResponse> ProcessCommandAsync(string[] commandParts)
+    public async Task<MenuServiceResponse> ProcessCommandAsync(string[] commandParts, bool isAdmin)
     {
         var response = new MenuServiceResponse();
 
@@ -125,8 +125,8 @@ public class CarWashService: IMenuService
 
         response = commandParts[1] switch
         {
-            Selfwash.Minus => await ProcessBalanceChangeAsync(-1, commandParts),
-            Selfwash.Plus => await ProcessBalanceChangeAsync(1, commandParts),
+            Selfwash.Minus => await ProcessBalanceChangeAsync(-1, commandParts, isAdmin),
+            Selfwash.Plus => await ProcessBalanceChangeAsync(1, commandParts, isAdmin),
             Selfwash.History => await ProcessHistoryAsync(),
             Selfwash.Stats => await ProcessStatsAsync(),
             Selfwash.ExportHistory => await ProcessExportHistoryAsync(),
@@ -138,9 +138,20 @@ public class CarWashService: IMenuService
         return response;
     }
 
-    private async Task<MenuServiceResponse> ProcessBalanceChangeAsync(int multiplier, string[] commandParts)
+    private async Task<MenuServiceResponse> ProcessBalanceChangeAsync(int multiplier, string[] commandParts, bool isAdmin)
     {
         var response = new MenuServiceResponse();
+
+        if (!isAdmin)
+        {
+            response.Answer = new CallbackQueryAnswer
+            {
+                Text = "Sorry, allowed only to bot admin"
+            };
+
+            return response;
+        }
+
         var change = commandParts.Length < 3 ? string.Empty : commandParts[2];
 
         if (int.TryParse(change, out var value))
