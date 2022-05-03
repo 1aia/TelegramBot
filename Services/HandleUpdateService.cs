@@ -1,10 +1,10 @@
-using System.Text;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.InputFiles;
 using Telegram.Bot.Types.ReplyMarkups;
+using TelegramBot.Models;
 
 namespace TelegramBot.Services;
 
@@ -12,36 +12,13 @@ public class HandleUpdateService
 {
     private readonly ITelegramBotClient _botClient;
     private readonly ILogger<HandleUpdateService> _logger;
+    private readonly Dictionary<string, IMenuService> _menuServicesDict;
 
-    public HandleUpdateService(ITelegramBotClient botClient, ILogger<HandleUpdateService> logger)
+    public HandleUpdateService(ITelegramBotClient botClient, ILogger<HandleUpdateService> logger, IEnumerable<IMenuService> menuServices)
     {
         _botClient = botClient;
         _logger = logger;
-    }
-
-    private static List<SelfwashHistory> _selfwashHistory = new List<SelfwashHistory>
-    {
-        new SelfwashHistory { Balance = 1000, CreatedAt = DateTime.UtcNow },
-    };
-
-    static class Selfwash
-    {
-        public const string Name = "selfwash";
-        public const string Minus = "minus";
-        public const string Plus = "plus";
-        public const string History = "history";
-        public const string ExportHistory = "export-history";
-        public const string MainMenu = "main-menu";
-        public const string Stats = "stats";
-        public const string Close = "close";
-        public const string MainMenuHeaderText = "Choose action";
-    }
-
-    class SelfwashHistory
-    {
-        public DateTime CreatedAt { get; set; }
-        public int? Change { get; set; }
-        public int Balance { get; set; }
+        _menuServicesDict = menuServices.ToDictionary(x => x.Command);
     }
 
     public async Task EchoAsync(Update update)
@@ -69,107 +46,132 @@ public class HandleUpdateService
             await HandleErrorAsync(exception);
         }
     }
-
-    static int Balance => _selfwashHistory.LastOrDefault()?.Balance ?? 0;
-
-    static InlineKeyboardMarkup GetInlineBalanceKeyboard()  
+    
+    private async Task<Message> SendInitMessage(Message message, IMenuService menuService)
     {
-        var buttons = new List<List<InlineKeyboardButton>>();
+        await _botClient.SendChatActionAsync(message.Chat.Id, ChatAction.Typing);
 
-        if (Balance >= 25)
+        var response = await menuService.InitResponseAsync();
+
+        return await OnMessageProcessedAsync(message, response);
+    }
+
+    private InlineKeyboardMarkup GetServicesMenuInlineKeyboard()
+    {
+        if (!_menuServicesDict.Any())
         {
-            var minusActions = new List<InlineKeyboardButton>();
-            buttons.Add(minusActions);
-
-            minusActions.Add(InlineKeyboardButton.WithCallbackData("-25", $"{Selfwash.Name} {Selfwash.Minus} 25"));
-
-            if (Balance >= 50)
-            {
-                minusActions.Add(InlineKeyboardButton.WithCallbackData("-50", $"{Selfwash.Name} {Selfwash.Minus} 50"));
-            }
-            if (Balance >= 100)
-            {
-                minusActions.Add(InlineKeyboardButton.WithCallbackData("-100", $"{Selfwash.Name} {Selfwash.Minus} 100"));
-            }
+            return null;
         }
 
-        var plusButtons = new List<InlineKeyboardButton>();
-        buttons.Add(plusButtons);
+        var buttons = new List<InlineKeyboardButton>();
 
-        plusButtons.Add(InlineKeyboardButton.WithCallbackData("+25", $"{Selfwash.Name} {Selfwash.Plus} 25"));
-        plusButtons.Add(InlineKeyboardButton.WithCallbackData("+100", $"{Selfwash.Name} {Selfwash.Plus} 100"));
-        plusButtons.Add(InlineKeyboardButton.WithCallbackData("+1000", $"{Selfwash.Name} {Selfwash.Plus} 1000"));
-
-        var menuLastRow = new List<InlineKeyboardButton>();
-        if (_selfwashHistory.Count > 1)
+        foreach (var button in _menuServicesDict)
         {
-            var historyButton = InlineKeyboardButton.WithCallbackData("History", $"{Selfwash.Name} {Selfwash.History}");
-            menuLastRow.Add(historyButton);
-
-            var statsButton = InlineKeyboardButton.WithCallbackData("Stats", $"{Selfwash.Name} {Selfwash.Stats}");
-            menuLastRow.Add(statsButton);
+            buttons.Add(InlineKeyboardButton.WithCallbackData(button.Value.Name, button.Value.Command));
         }
-
-        var closeButton = InlineKeyboardButton.WithCallbackData("Close", $"{Selfwash.Name} {Selfwash.Close}");
-        menuLastRow.Add(closeButton);
-
-        buttons.Add(menuLastRow);
 
         return new InlineKeyboardMarkup(buttons);
     }
 
-    static InlineKeyboardMarkup GetHistoryKeyboard() 
-    {        
-        var buttons = new List<List<InlineKeyboardButton>>();
+    private async Task<Message> SendDefaultMessage(Message message)
+    {
+        var replyMarkup = GetServicesMenuInlineKeyboard();
 
-        var pageSize = 5;
-        var skip = _selfwashHistory.Count > pageSize ? _selfwashHistory.Count - pageSize: 0;
+        var text = replyMarkup != null ? "Active services" : "No service available";
 
-        foreach(var historyItem in _selfwashHistory.Skip(skip).Take(pageSize).Reverse())
+        return await _botClient.SendTextMessageAsync(
+            chatId: message.Chat.Id,
+            text: text,
+            replyMarkup: replyMarkup);
+    }
+
+    private async Task<Message> OnMessageProcessedAsync(Message message, MenuServiceResponse menuServiceResponse)
+    {
+        if (menuServiceResponse.NewMessage != null)
         {
-            var text = $"{historyItem.CreatedAt}: {historyItem.Change ?? 0} => {historyItem.Balance}";
+            var msg = menuServiceResponse.NewMessage;
 
-            buttons.Add(new List<InlineKeyboardButton> { InlineKeyboardButton.WithCallbackData(text, $"{Selfwash.Name} {Selfwash.MainMenu}") });
+            return await _botClient.SendTextMessageAsync(
+                chatId: message.Chat.Id,
+                text: msg.Text,
+                replyMarkup: msg.ReplyMarkup);
         }
 
-        buttons.Add(new List<InlineKeyboardButton>
+        if (menuServiceResponse.EditedMessage != null)
         {
-            InlineKeyboardButton.WithCallbackData("Export history", $"{Selfwash.Name} {Selfwash.ExportHistory}"),
-            InlineKeyboardButton.WithCallbackData("Back", $"{Selfwash.Name} {Selfwash.MainMenu}")
-        });
+            var msg = menuServiceResponse.EditedMessage;
 
-        return new InlineKeyboardMarkup(buttons);
+            return await _botClient.EditMessageTextAsync(
+                chatId: message.Chat.Id,
+                messageId: message.MessageId,
+                text: msg.Text,
+                replyMarkup: msg.ReplyMarkup);
+        }
+
+        if (menuServiceResponse.Document != null)
+        {
+            var doc = menuServiceResponse.Document;
+
+            using var stream = new MemoryStream(doc.Data);
+
+            return await _botClient.SendDocumentAsync(
+                chatId: message.Chat.Id,
+                document: new InputOnlineFile(stream, doc.FileName));
+        }
+
+        return null;
+    }
+
+    private async Task OnCallbackQueryReceivedAsync(CallbackQuery callbackQuery, MenuServiceResponse menuServiceResponse)
+    {
+        var message = callbackQuery.Message;
+
+        await OnMessageProcessedAsync(message, menuServiceResponse);
+
+        if (menuServiceResponse.IsMessageDeleted)
+        {
+            await _botClient.DeleteMessageAsync(
+                chatId: message.Chat.Id,
+                messageId: message.MessageId);
+        }
+
+        if (menuServiceResponse.Answer != null)
+        {
+            var answer = menuServiceResponse.Answer;
+
+            await _botClient.AnswerCallbackQueryAsync(
+                callbackQueryId: callbackQuery.Id,
+                text: answer.Text);
+        }
     }
 
     private async Task BotOnMessageReceived(Message message)
     {
         _logger.LogInformation("Receive message type: {messageType}", message.Type);
+
         if (message.Type != MessageType.Text)
+        {
             return;
+        }
 
-        var action = message.Text!.Split(' ')[0] switch
+        var command = message.Text!.Split(' ')[0].Replace("/", "");
+
+        Task<Message> action;
+
+        if (_menuServicesDict.ContainsKey(command))
         {
-            $"/{Selfwash.Name}"     => SendSelfwashKeyboard(_botClient, message),
-            _           => Default(_botClient, message)
-        };
-        Message sentMessage = await action;
+            var service = _menuServicesDict[command];
+
+            action = SendInitMessage(message, service);
+        }
+        else
+        {
+            action = SendDefaultMessage(message);
+        }
+        
+        var sentMessage = await action;
+
         _logger.LogInformation("The message was sent with id: {sentMessageId}",sentMessage.MessageId);
-
-        static async Task<Message> SendSelfwashKeyboard(ITelegramBotClient bot, Message message)
-        {
-            await bot.SendChatActionAsync(message.Chat.Id, ChatAction.Typing);
-
-            return await bot.SendTextMessageAsync(chatId: message.Chat.Id,
-                                                  text: Selfwash.MainMenuHeaderText,
-                                                  replyMarkup: GetInlineBalanceKeyboard());
-        }
-
-        static async Task<Message> Default(ITelegramBotClient bot, Message message)
-        {
-            var text = $"Balance: {Balance}";
-
-            return await bot.SendTextMessageAsync(chatId: message.Chat.Id, text: text);
-        }
     }
 
     // Process Inline Keyboard callback data
@@ -180,107 +182,25 @@ public class HandleUpdateService
 
         if (parts?.Length > 0)
         {
-            if (parts[0] == Selfwash.Name)
+            var serviceName = parts[0];
+
+            if (_menuServicesDict.ContainsKey(serviceName))
             {
-                text = $"Received {callbackQuery.Data}. Unrecognized {Selfwash.Name} value";
+                var service = _menuServicesDict[serviceName];
 
-                var type = parts[1];
+                var response = parts.Length == 1 
+                    ? await service.InitResponseAsync()
+                    : await service.ProcessCommandAsync(parts);
 
-                switch (type)
-                {
-                    case Selfwash.Minus:
-                    case Selfwash.Plus:
-                        {
-                            var multiplier = type switch
-                            {
-                                Selfwash.Minus => -1,
-                                _ => 1
-                            };
-
-                            var initialBalance = Balance;
-                            var initialButtons = GetInlineBalanceKeyboard().InlineKeyboard.Sum(x => x.Count());
-
-                            if (int.TryParse(parts[2], out var value))
-                            {
-                                var receivedValue = multiplier * value;
-                                var resultBalance = initialBalance + receivedValue;
-
-                                _selfwashHistory.Add(new SelfwashHistory
-                                {
-                                    Balance = resultBalance,
-                                    Change = receivedValue,
-                                    CreatedAt = DateTime.UtcNow
-                                });
-
-                                text = $"Received {receivedValue}. Balance {resultBalance}";
-
-                                await _botClient.SendTextMessageAsync(callbackQuery.Message.Chat.Id, text: text);
-
-                                var resultButtons = GetInlineBalanceKeyboard().InlineKeyboard.Sum(x => x.Count());
-
-                                if (initialButtons != resultButtons)
-                                {
-                                    await RenderSelfwashMenuAsync(callbackQuery);
-                                }
-
-                                return;
-                            }                            
-
-                            break;
-                        }
-
-                        case Selfwash.History:
-                            await _botClient.EditMessageTextAsync(
-                            chatId: callbackQuery.Message.Chat.Id,
-                            messageId: callbackQuery.Message.MessageId,
-                            text: "History",
-                            replyMarkup: GetHistoryKeyboard());
-
-                            return;
-
-                        case Selfwash.Stats:
-                            text = $"Total spent: {_selfwashHistory.Where(x => x.Change < 0).Sum(x => -x.Change) }";
-                            break;
-
-                        case Selfwash.MainMenu:
-                            await RenderSelfwashMenuAsync(callbackQuery);
-                            return;
-
-                        case Selfwash.ExportHistory:
-                        {
-                            var items = _selfwashHistory.Select(x => $"[{x.CreatedAt}] {x.Change ?? 0} => {x.Balance}");
-                            var exportText = string.Join("\r\n", items);
-                            var today = DateTime.UtcNow;
-                            var fileName = $"history{today:dd.MM.yyyy HH-mm}.txt";
-
-                            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(exportText));
-                            await _botClient.SendDocumentAsync(
-                                chatId: callbackQuery.Message.Chat.Id,
-                                document: new InputOnlineFile(stream, fileName));
-                            return;
-                        }                            
-
-                        case Selfwash.Close:
-                            await _botClient.DeleteMessageAsync(
-                                chatId: callbackQuery.Message.Chat.Id,
-                                messageId: callbackQuery.Message.MessageId);
-                            return;
-                }
+                await OnCallbackQueryReceivedAsync(callbackQuery, response);
             }
         }
-
-        await _botClient.AnswerCallbackQueryAsync(
-            callbackQueryId: callbackQuery.Id,
-            text: text);
-    }
-
-    private async Task RenderSelfwashMenuAsync(CallbackQuery callbackQuery)
-    {
-        await _botClient.EditMessageTextAsync(
-            chatId: callbackQuery.Message.Chat.Id,
-            messageId: callbackQuery.Message.MessageId,
-            text: Selfwash.MainMenuHeaderText,
-            replyMarkup: GetInlineBalanceKeyboard());
+        else
+        {
+            await _botClient.AnswerCallbackQueryAsync(
+                callbackQueryId: callbackQuery.Id,
+                text: text);
+        }        
     }
 
     private Task UnknownUpdateHandlerAsync(Update update)

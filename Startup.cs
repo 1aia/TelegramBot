@@ -1,4 +1,5 @@
 using Telegram.Bot;
+using TelegramBot.DataAccess;
 using TelegramBot.Services;
 
 namespace TelegramBot;
@@ -32,6 +33,11 @@ public class Startup
 
         // Dummy business-logic service
         services.AddScoped<HandleUpdateService>();
+
+        services.AddScoped<IDataProvider, DataProvider>();
+        services.AddScoped<IDataRepository, DataRepository>();
+        services.AddScoped<IMenuService, CarWashService>();
+        services.AddScoped<IMenuService, EmptyService>();
 
         // The Telegram.Bot library heavily depends on Newtonsoft.Json library to deserialize
         // incoming webhook updates and send serialized responses back.
