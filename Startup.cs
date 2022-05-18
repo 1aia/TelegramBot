@@ -1,6 +1,8 @@
 using Telegram.Bot;
+using TelegramBot.Configuration;
 using TelegramBot.DataAccess;
 using TelegramBot.Services;
+using TelegramBot.Services.CoinMarketCap;
 
 namespace TelegramBot;
 
@@ -9,7 +11,7 @@ public class Startup
     public Startup(IConfiguration configuration)
     {
         Configuration = configuration;
-        BotConfig = Configuration.GetSection("BotConfiguration").Get<BotConfiguration>();
+        BotConfig = Configuration.GetSection(Literals.BotConfigurationKey).Get<BotConfiguration>();
     }
 
     public IConfiguration Configuration { get; }
@@ -37,7 +39,9 @@ public class Startup
         services.AddScoped<IDataProvider, DataProvider>();
         services.AddScoped<IDataRepository, DataRepository>();
         services.AddScoped<IMenuService, CarWashService>();
+        services.AddScoped<IMenuService, CoinMarketCapService>();
         services.AddScoped<IMenuService, EmptyService>();
+        services.AddScoped<CoinMarketCapApiClient>();
 
         // The Telegram.Bot library heavily depends on Newtonsoft.Json library to deserialize
         // incoming webhook updates and send serialized responses back.

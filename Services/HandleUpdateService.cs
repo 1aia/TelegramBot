@@ -98,6 +98,7 @@ public class HandleUpdateService
             return await _botClient.SendTextMessageAsync(
                 chatId: message.Chat.Id,
                 text: msg.Text,
+                parseMode: msg.ParseMode,
                 replyMarkup: msg.ReplyMarkup);
         }
 

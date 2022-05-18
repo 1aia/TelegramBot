@@ -1,4 +1,5 @@
-﻿using Telegram.Bot.Types.ReplyMarkups;
+﻿using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.ReplyMarkups;
 
 namespace TelegramBot.Models;
 
@@ -20,6 +21,8 @@ public class TextMessage
     public string Text { get; set; }
 
     public InlineKeyboardMarkup ReplyMarkup { get; set; }
+
+    public ParseMode? ParseMode { get; set; }
 }
 
 public class CallbackQueryAnswer
