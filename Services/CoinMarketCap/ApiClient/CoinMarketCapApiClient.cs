@@ -8,9 +8,12 @@ namespace TelegramBot.Services.CoinMarketCap;
 public class CoinMarketCapApiClient
 {
     private readonly CoinMarketCapConfiguration _config;
-    public CoinMarketCapApiClient(IConfiguration configuration)
+    private readonly ILogger<CoinMarketCapApiClient> _logger;
+
+    public CoinMarketCapApiClient(IConfiguration configuration, ILogger<CoinMarketCapApiClient> logger)
     {
         _config = configuration.GetSection(Literals.CoinMarketCapConfigurationKey).Get<CoinMarketCapConfiguration>();
+        _logger = logger;
     }
 
     private async Task<Response<ApiResponse<T>>> ExecuteAsync<T>(string restUri)
@@ -24,10 +27,13 @@ public class CoinMarketCapApiClient
 
         try
         {
+            _logger.LogInformation($"Requesting {url}");
+
             response.Data = await url.WithHeader("X-CMC_PRO_API_KEY", _config.ApiKey).GetJsonAsync<ApiResponse<T>>();
         }
-        catch
+        catch(Exception ex)
         {
+            _logger.Log(LogLevel.Error, ex, $"{url} failed");
             response.Success = false;
         }       
 

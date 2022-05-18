@@ -30,7 +30,7 @@ public class CoinMarketCapService : IMenuService
         messageLines.Add(GetMarketMessageLine(marketTask.Result));
         messageLines.AddRange(currenciesTask.Result.Select(GetCurrencyMessageLine));
 
-        var text = string.Join("\n", GetStrings(messageLines).Append(GetKeyInfoString(keyInfoTask.Result)));
+        var text = string.Join("\n", GetStrings(messageLines.Where(x => x != null)).Append(GetKeyInfoString(keyInfoTask.Result)));
 
         return new MenuServiceResponse
         {
