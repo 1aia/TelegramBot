@@ -58,7 +58,7 @@ public class CoinMarketCapApiClient
             return new CryptoCurrency
             {
                 Name = x.Key,
-                Rank = currency.Cmc_Rank,
+                Rank = currency.Cmc_Rank ?? 0,
                 Price = quote?.Price ?? 0,
                 DailyPercentageChange = quote?.Percent_Change_24h ?? 0
             };
